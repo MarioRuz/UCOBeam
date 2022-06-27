@@ -1,4 +1,6 @@
 # UCOBeam
+Authors: Cristina Aguilar-Porro, Mario L. Ruz, Francisco Blanco-Rodríguez.
+
 Interactive tool UCOBeam and Matlab scripts.
 
 This repository contains the developed code for obtaining the natural frequencies of an arbitrarily supported single-span or
