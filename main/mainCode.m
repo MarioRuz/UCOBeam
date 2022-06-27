@@ -1,0 +1,196 @@
+%% A modified polynomial-based approach to obtaining the eigenvalues of a uniform Euler-Bernoulli beam carrying any number of attachments
+%% Authors: Cristina Aguilar-Porro, Mario L. Ruz, Francisco Blanco-Rodríguez.
+
+%% Dependencies:
+% To run this script the following .m files are needed:
+% myDet.m
+% SumaPol.m
+% SumPolc.m
+
+%% Main parameters:
+% sigma: numerator
+% sigmaden: denominator
+% xl: vector containing the localization of the elements
+% vectorS
+% E: Young's Modulus (N/m^2)
+% L: Length of the beam (m)
+% Rho: Mass per unit length (kg(m)
+% I: Area of moment of inertia of the cross section (m^4)
+% N: Number of components modes used.
+clear all
+N = 40;
+tic;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%   
+% Characteristics of the lumped elements
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Example 1 corresponding to the paper Cha, P.D., 2002. Eigenvalues of a linear elastica carrying lumped masses, springs and viscous dampers.
+% Journal of Sound and Vibration 257, 798–808. doi:10.1006/jsvi.2001.4242.
+% Example 1. Cha 2002. Three free natural frequencies of a simply supported, uniform Euler-Bernouilli beam carrying a mass.
+E = 2.756e10;      %(N/m^2)  Young's Modulus
+L = 15.24;         %(m)      Length of the beam
+rho = 1.6363e4;    %(kg/m)   Mass per unit length
+I = 6.0482;        %(m^4)    Area of moment of inertia of the cross section
+% 
+% %Table 1
+xl = [0.5]; %x/L
+vectorS = [0]; % phi=0 o phip=1
+%Sigma matrix
+Sigma    = [0 0.1 0 0]; 
+Sigmaden = [0 0 0 1];
+omegaP = [1.237859 5.425144 11.27887]*100/sqrt(E*I/((rho*L)*L^3)); % Values obtained from Cha 2002 (see Table 1 in the paper).
+%% end example 1
+
+%% Example 2 corresponding to the paper Cha, P-D., 2005. A general approach to formulating the frequency equation for a beam carrying miscellaneous attachments. 
+%% Table 3     
+%% FOR TESTING THIS EXAPMLE, UNCOMMENT LINES 46-51
+% xl = [0.3]; %x/L
+% vectorS = [0]; % phi=0 o phip=1
+% % Sigma matrix
+% Sigma    = [0 1 0 3]; 
+% Sigmaden = [0 0 0 1];
+% omegaP = [6.532235 29.760059 86.731226 143.257055 209.463777]; %N=20;]*100/sqrt(E*I/((rho*L)*L^3)); % Values obtained from Cha 2005 (see Table 3 in the paper).
+%% End example 2
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%                                MAIN CODE                               %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Number  of lumped elements 
+S = length(xl);
+
+%% Natural frequencies of the unconstrained beam
+Mvector = 1*ones(N,1); % phi_i(xl) = sqrt(2)       *sin(i*pi*xl)
+                       % phip_i(xl)= sqrt(2)*(i*pi)*cos(i*pi*xl)
+Kvector = 1*ones(N,1); %Kvector(1,i) = Ki 
+for hv = 1:N
+    Kvector(hv) = (hv*pi)^4;
+end
+
+% Matriz de polinomios (lambda^2 + Kvector(i) por filas)
+PolMat = zeros(N,3);
+PolMat(:,1) = ones(N,1);
+PolMat(:,3) = Kvector; 
+
+%%%% Termino 1 %%%% 
+Term1 = PolMat(1,:);
+for i=2:N
+    Termi = PolMat(i,:);
+    Term1 = conv(Term1,Termi);
+end
+
+% Convert to a diagonal matrix
+T1 = zeros(S,S,length(Term1)+size(Sigmaden,2)-1);    
+
+for jv = 1:S
+    Sigmaconv = Sigmaden(jv,:);
+    T1jv = conv(Term1,Sigmaconv);
+    T1(jv,jv,:) = T1jv';
+end
+
+%%%% Termino 2 %%%%     
+T2 = zeros(S,S,length(Term1)+size(Sigmaden,2)-1);
+
+% Eigenfunctions at the attachment locations
+alpha = zeros(S,S,N);
+for hv = 1:N
+    for jv = 1:S
+        for kv = 1:S
+            if     (vectorS(jv) == 0) && (vectorS(kv) == 0)
+                alpha (jv,kv,hv) = (2)*(sin(hv*pi*xl(jv))*sin(hv*pi*xl(kv)));
+            elseif (vectorS(jv) == 0) && (vectorS(kv) == 1)
+                alpha (jv,kv,hv) = (2)*(sin(hv*pi*xl(jv))*(hv*pi)*cos(hv*pi*xl(kv)));
+            elseif (vectorS(jv) == 1) && (vectorS(kv) == 0)
+                alpha (jv,kv,hv) = (2)*((hv*pi)*cos(hv*pi*xl(jv))*sin(hv*pi*xl(kv)));
+            else
+                alpha (jv,kv,hv) = (2)*((hv*pi)*cos(hv*pi*xl(jv))*(hv*pi)*cos(hv*pi*xl(kv)));
+            end
+        end
+    end
+end
+
+for jv = 1:S
+    %%%% Termino 2jk %%%%
+    Term2jv = Sigma(jv,:);
+    for kv = 1:S
+        Term2sum = [0 0 0];
+        for i=1:N
+            Sumi = [0 0 1]; 
+            for j=1:N   % Productorio dentro del sumatorio
+                if j==i %No se cuenta
+                    Sumi = Sumi;
+                else
+                    Termj = PolMat(j,:);
+                    Sumi = conv(Sumi,Termj);
+                end
+            end
+            Sumi =  alpha(jv,kv,i)*Sumi;
+            Term2sum = SumaPol(Term2sum,Sumi);
+        end
+        Term2 = conv(Term2jv,Term2sum);
+        Lt2 = length(Term2);
+        T2(jv,kv,1:Lt2) = Term2';
+    end
+end
+
+%%%% Suma de Terminos %%%%
+param1 = 1;
+param2 = 1; % Fix param to 0 for obtaining the natural frequencies of the beam
+
+maxT1 = max(max(max((T1))));
+maxT2 = max(max(max((T2))));
+
+T = param1*T1 + param2*T2;
+maxT = max(max(max((T))));
+% Strategy for remove NaN and Inf
+T = T/maxT;
+Eqpoly = myDet(T);
+
+reducedmodel = 1;
+% Remove natural frequencies of the beam (([1:N]*pi)^2) when
+% MORE THAN ONE lumped elements is attached -> REDUCED MODEL
+% Se puede usar ahora tf and minreal
+if (S>1) && (reducedmodel)
+    numsys = Eqpoly';
+    % Strategy for remove NaN and Inf
+    densys = Term1/max(Term1);
+    % Build densys
+    for j=2:S-1
+        densys = conv(densys,Term1/max(Term1)); 
+    end
+    % Build sys
+    sys = tf(numsys,densys);
+    % Pole-zero cancellation with a tolerance
+    Tolsys = 1e-2;
+    sysm = minreal(sys,Tolsys);
+    % Extract polynomials
+    [numsys,den] = tfdata(sysm,'v');
+else
+    numsys = Eqpoly;
+end
+
+lambda = roots(numsys');
+
+format long g
+i = sqrt(-1);
+% if max(Sigma(:,2))==0 % No damping
+% max(Sigma(:,2)) cambiado a max(Sigma(:,3)) al pasar a trabajar con 4
+% elementos
+if max(Sigma(:,3))==0 % No damping
+    % -> omega*i=lambda
+    omega = -lambda*i;
+    indices = find(real(omega)>0);
+    omega = sort(real(omega(indices)));
+    [omega(1:length(omegaP)) omegaP'] %(abs(omega(1:3)-omegaP')./omegaP')*100]
+    omega([1:5])
+else                  % Damping
+    lambda = flip(lambda(find(imag(lambda)>0)))
+     [lambda(1:3) lambdaP' (abs(lambda(1:3)-lambdaP')./lambdaP')*100]
+     lambda([1:5])
+     % MRR, autores lo llaman lamdba cuando hay viscosidad
+     omega = -lambda*i
+end
+
+cputime = toc
+
+% [omega(1:3) omegaP' (abs(omega(1:3)-omegaP')./omegaP')*100]
+% omega(1:5)
